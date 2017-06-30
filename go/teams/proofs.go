@@ -118,9 +118,9 @@ func (p proof) check(ctx context.Context, g *libkb.GlobalContext) error {
 	if lm == nil {
 		return NewProofError(p, "nil link map")
 	}
-	linkID, ok := lm[earlierSeqno]
+	linkID, ok := lm[laterSeqno]
 	if !ok {
-		return NewProofError(p, fmt.Sprintf("no linkID for seqno %d", earlierSeqno))
+		return NewProofError(p, fmt.Sprintf("no linkID for seqno %d", laterSeqno))
 	}
 
 	if !triple.LinkID.Export().Eq(linkID) {
