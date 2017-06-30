@@ -1,16 +1,20 @@
 package teams
 
 import (
+	"context"
+	"fmt"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 )
 
-func newProofTerm(i keybase1.UserOrTeamID, s keybase1.SignatureMetadata) proofTerm {
-	return proofTerm{leafID: i, sigMeta: s}
+func newProofTerm(i keybase1.UserOrTeamID, s keybase1.SignatureMetadata, lm map[keybase1.Seqno]keybase1.LinkID) proofTerm {
+	return proofTerm{leafID: i, sigMeta: s, linkMap: lm}
 }
 
 type proofTerm struct {
 	leafID  keybase1.UserOrTeamID
 	sigMeta keybase1.SignatureMetadata
+	linkMap map[keybase1.Seqno]keybase1.LinkID
 }
 
 type proofTermBookends struct {
@@ -85,4 +89,54 @@ func (p *proofSetT) AddNeededHappensBeforeProof(a proofTerm, b proofTerm) *proof
 	}
 	p.proofs[idx] = append(p.proofs[idx], proof{a, b})
 	return p
+}
+
+func (p proof) lookupMerkleTreeChain(ctx context.Context, g *libkb.GlobalContext) (ret *libkb.MerkleTriple, err error) {
+	leaf, err := g.MerkleClient.LookupLeafAtHashMeta(ctx, p.a.leafID, p.b.sigMeta.PrevMerkleRootSigned.HashMeta)
+	if err != nil {
+		return nil, err
+	}
+	if p.a.leafID.IsUser() {
+		ret = leaf.Public
+	} else {
+		ret = leaf.Private
+	}
+	return ret, nil
+}
+
+func (p proof) check(ctx context.Context, g *libkb.GlobalContext) error {
+	triple, err := p.lookupMerkleTreeChain(ctx, g)
+	if err != nil {
+		return err
+	}
+	laterSeqno := triple.Seqno
+	earlierSeqno := p.a.sigMeta.SigChainLocation.Seqno
+	if earlierSeqno > laterSeqno {
+		return NewProofError(p, fmt.Sprintf("seqno %d > %d", earlierSeqno, laterSeqno))
+	}
+	lm := p.a.linkMap
+	if lm == nil {
+		return NewProofError(p, "nil link map")
+	}
+	linkID, ok := lm[earlierSeqno]
+	if !ok {
+		return NewProofError(p, fmt.Sprintf("no linkID for seqno %d", earlierSeqno))
+	}
+
+	if !triple.LinkID.Export().Eq(linkID) {
+		return NewProofError(p, fmt.Sprintf("hash mismatch: %s != %s", triple.LinkID, linkID))
+	}
+	return nil
+}
+
+func (p *proofSetT) checkProofs(ctx context.Context, g *libkb.GlobalContext) error {
+	for _, v := range p.proofs {
+		for _, proof := range v {
+			err := proof.check(ctx, g)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
