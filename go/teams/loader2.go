@@ -473,7 +473,7 @@ func (l *TeamLoader) checkParentChildOperations(ctx context.Context,
 func (l *TeamLoader) checkProofs(ctx context.Context,
 	state *keybase1.TeamData, proofSet *proofSetT) error {
 
-	return proofSet.checkProofs(ctx, l.G())
+	return proofSet.check(ctx, l.G())
 }
 
 // Add data to the state that is not included in the sigchain:

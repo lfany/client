@@ -91,6 +91,8 @@ func (p *proofSetT) AddNeededHappensBeforeProof(a proofTerm, b proofTerm) *proof
 	return p
 }
 
+// lookupMerkleTreeChain loads the path up to the merkle tree and back down that corresponds
+// to this proof. It will contact the API server.  Returns the sigchain tail on success.
 func (p proof) lookupMerkleTreeChain(ctx context.Context, g *libkb.GlobalContext) (ret *libkb.MerkleTriple, err error) {
 	leaf, err := g.MerkleClient.LookupLeafAtHashMeta(ctx, p.a.leafID, p.b.sigMeta.PrevMerkleRootSigned.HashMeta)
 	if err != nil {
@@ -104,6 +106,8 @@ func (p proof) lookupMerkleTreeChain(ctx context.Context, g *libkb.GlobalContext
 	return ret, nil
 }
 
+// check a single proof. Call to the merkle API enddpoint, and then ensure that the
+// data that comes back fits the proof and previously checked sighcain links.
 func (p proof) check(ctx context.Context, g *libkb.GlobalContext) error {
 	triple, err := p.lookupMerkleTreeChain(ctx, g)
 	if err != nil {
@@ -129,7 +133,8 @@ func (p proof) check(ctx context.Context, g *libkb.GlobalContext) error {
 	return nil
 }
 
-func (p *proofSetT) checkProofs(ctx context.Context, g *libkb.GlobalContext) error {
+// check the entire proof set, failing if any one proof fails.
+func (p *proofSetT) check(ctx context.Context, g *libkb.GlobalContext) error {
 	for _, v := range p.proofs {
 		for _, proof := range v {
 			err := proof.check(ctx, g)
